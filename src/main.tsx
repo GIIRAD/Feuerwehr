@@ -32,6 +32,77 @@ const createInitialTeams = (): Team[] =>
     status: 'idle',
   }));
 
+type StoredAppState = {
+  teams: Team[];
+  activeTeamId: number;
+};
+
+const STORAGE_KEY = 'feuerwehr-wettkampf-state';
+
+const isTeamStatus = (status: unknown): status is TeamStatus =>
+  status === 'idle' || status === 'running' || status === 'finished';
+
+const normalizeStoredTeams = (value: unknown): Team[] | null => {
+  if (!Array.isArray(value)) return null;
+
+  const initialTeams = createInitialTeams();
+
+  return initialTeams.map((fallbackTeam, index) => {
+    const storedTeam = value[index];
+
+    if (typeof storedTeam !== 'object' || storedTeam === null) {
+      return fallbackTeam;
+    }
+
+    const team = storedTeam as Partial<Team>;
+
+    return {
+      id: fallbackTeam.id,
+      name:
+        typeof team.name === 'string' && team.name.trim() !== ''
+          ? team.name
+          : fallbackTeam.name,
+      pullTime: typeof team.pullTime === 'number' ? team.pullTime : null,
+      totalTime: typeof team.totalTime === 'number' ? team.totalTime : null,
+      status:
+        isTeamStatus(team.status) && team.status !== 'running'
+          ? team.status
+          : 'idle',
+    };
+  });
+};
+
+const loadStoredAppState = (): StoredAppState => {
+  const fallbackState: StoredAppState = {
+    teams: createInitialTeams(),
+    activeTeamId: 1,
+  };
+
+  try {
+    const storedValue = window.localStorage.getItem(STORAGE_KEY);
+
+    if (!storedValue) return fallbackState;
+
+    const parsedValue = JSON.parse(storedValue) as Partial<StoredAppState>;
+    const teams = normalizeStoredTeams(parsedValue.teams);
+
+    if (!teams) return fallbackState;
+
+    const activeTeamId =
+      typeof parsedValue.activeTeamId === 'number' &&
+      teams.some((team) => team.id === parsedValue.activeTeamId)
+        ? parsedValue.activeTeamId
+        : 1;
+
+    return {
+      teams,
+      activeTeamId,
+    };
+  } catch {
+    return fallbackState;
+  }
+};
+
 // Hilfsfunktion zur Formatierung der Millisekunden in mm:ss.hh
 const formatTime = (ms: number | null | undefined): string => {
   if (ms == null) return '--:--.--';
@@ -47,8 +118,9 @@ const formatTime = (ms: number | null | undefined): string => {
 };
 
 export default function App() {
-  const [teams, setTeams] = useState<Team[]>(createInitialTeams);
-  const [activeTeamId, setActiveTeamId] = useState(1);
+  const [storedAppState] = useState(loadStoredAppState);
+  const [teams, setTeams] = useState<Team[]>(storedAppState.teams);
+  const [activeTeamId, setActiveTeamId] = useState(storedAppState.activeTeamId);
   const [isTimerRunning, setIsTimerRunning] = useState(false);
   const [startTime, setStartTime] = useState<number | null>(null);
   const [currentSplitTime, setCurrentSplitTime] = useState<number | null>(null);
@@ -56,8 +128,18 @@ export default function App() {
   const [view, setView] = useState<ViewMode>('main');
 
   const timerRef = useRef<ReturnType<typeof window.setInterval> | null>(null);
-
   const activeTeam = teams.find((team) => team.id === activeTeamId);
+
+  useEffect(() => {
+    const stateToStore: StoredAppState = {
+      teams: teams.map((team) =>
+        team.status === 'running' ? { ...team, status: 'idle' } : team,
+      ),
+      activeTeamId,
+    };
+
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(stateToStore));
+  }, [activeTeamId, teams]);
 
   const handleStop = useCallback(() => {
     if (startTime === null) return;
@@ -252,7 +334,7 @@ export default function App() {
           <div className="flex h-full flex-col rounded-3xl border border-gray-700/50 bg-gray-800 p-5 shadow-xl md:p-6">
             <h2 className="mb-6 flex shrink-0 items-center border-b border-gray-700 pb-4 text-2xl font-black uppercase tracking-tight text-white xl:text-3xl">
               <Trophy className="mr-3 text-red-500" size={32} />
-              Feuerwehr Wettkampf
+              Zug auf Zeit
             </h2>
 
             <div className="mb-4 shrink-0">
@@ -292,7 +374,7 @@ export default function App() {
 
               <div className="relative z-10 mt-2 flex flex-col items-center gap-1">
                 <span className="text-xs font-medium uppercase tracking-widest text-gray-400">
-                  Zwischenzeit (Auto)
+                  Zwischenzeit (TLF)
                 </span>
 
                 <span
@@ -372,7 +454,7 @@ export default function App() {
                   <tr className="border-b-2 border-gray-700 text-xs uppercase tracking-wider text-gray-400">
                     <th className="w-16 pb-2 pl-4 font-semibold">Pl.</th>
                     <th className="pb-2 font-semibold">Team Name</th>
-                    <th className="pb-2 text-right font-semibold">Ziehen (Auto)</th>
+                    <th className="pb-2 text-right font-semibold">Ziehen (TLF)</th>
                     <th className="pb-2 pr-4 text-right font-semibold text-white">
                       Gesamtzeit
                     </th>
