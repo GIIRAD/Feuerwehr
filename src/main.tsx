@@ -24,7 +24,7 @@ type Team = {
 };
 
 const createInitialTeams = (): Team[] =>
-  Array.from({ length: 14 }, (_, index) => ({
+  Array.from({ length: 16 }, (_, index) => ({
     id: index + 1,
     name: `Team ${index + 1}`,
     pullTime: null,
