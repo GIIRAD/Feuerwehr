@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   AlertCircle,
+  Clock3,
   Flag,
   Play,
   RotateCcw,
@@ -117,6 +118,30 @@ const formatTime = (ms: number | null | undefined): string => {
     .padStart(2, '0')}.${hundredths.toString().padStart(2, '0')}`;
 };
 
+const formatTimeInput = (ms: number | null): string => (ms == null ? '' : formatTime(ms));
+
+const parseTimeInput = (value: string): number | null => {
+  const normalizedValue = value.trim().replace(',', '.');
+
+  if (normalizedValue === '') return null;
+
+  const match = normalizedValue.match(/^(?:(\d+):)?(\d+)(?:\.(\d{1,3}))?$/);
+
+  if (!match) return Number.NaN;
+
+  const minutes = match[1] ? Number(match[1]) : 0;
+  const seconds = Number(match[2]);
+  const milliseconds = match[3] ? Number(match[3].padEnd(3, '0')) : 0;
+
+  if (!Number.isFinite(minutes) || !Number.isFinite(seconds) || !Number.isFinite(milliseconds)) {
+    return Number.NaN;
+  }
+
+  if (match[1] && seconds > 59) return Number.NaN;
+
+  return minutes * 60_000 + seconds * 1000 + milliseconds;
+};
+
 export default function App() {
   const [storedAppState] = useState(loadStoredAppState);
   const [teams, setTeams] = useState<Team[]>(storedAppState.teams);
@@ -126,6 +151,9 @@ export default function App() {
   const [currentSplitTime, setCurrentSplitTime] = useState<number | null>(null);
   const [elapsedTime, setElapsedTime] = useState(0);
   const [view, setView] = useState<ViewMode>('main');
+  const [manualPullInput, setManualPullInput] = useState('');
+  const [manualTotalInput, setManualTotalInput] = useState('');
+  const [isManualTimeEntryOpen, setIsManualTimeEntryOpen] = useState(false);
 
   const timerRef = useRef<ReturnType<typeof window.setInterval> | null>(null);
   const activeTeam = teams.find((team) => team.id === activeTeamId);
@@ -249,7 +277,48 @@ export default function App() {
       setElapsedTime(0);
       setCurrentSplitTime(null);
       setStartTime(null);
+      setManualPullInput('');
+      setManualTotalInput('');
+      setIsManualTimeEntryOpen(false);
     }
+  };
+
+  const handleManualTimeEntryToggle = () => {
+    setIsManualTimeEntryOpen((isOpen) => {
+      if (!isOpen) {
+        setManualPullInput(formatTimeInput(activeTeam?.pullTime ?? null));
+        setManualTotalInput(formatTimeInput(activeTeam?.totalTime ?? null));
+      }
+
+      return !isOpen;
+    });
+  };
+
+  const handleManualTimeSave = () => {
+    const pullTime = parseTimeInput(manualPullInput);
+    const totalTime = parseTimeInput(manualTotalInput);
+
+    if (Number.isNaN(pullTime) || Number.isNaN(totalTime) || totalTime === null) {
+      alert('Bitte gib eine gültige Gesamtzeit ein, z. B. 1:23.45 oder 83,45.');
+      return;
+    }
+
+    if (pullTime !== null && pullTime > totalTime) {
+      alert('Die TLF-Zeit darf nicht größer als die Gesamtzeit sein.');
+      return;
+    }
+
+    setTeams((currentTeams) =>
+      currentTeams.map((team) =>
+        team.id === activeTeamId
+          ? { ...team, pullTime, totalTime, status: 'finished' }
+          : team,
+      ),
+    );
+
+    setCurrentSplitTime(pullTime);
+    setElapsedTime(totalTime);
+    setIsManualTimeEntryOpen(false);
   };
 
   const sortedTeams = [...teams].sort((a, b) => {
@@ -344,7 +413,10 @@ export default function App() {
 
               <select
                 value={activeTeamId}
-                onChange={(event) => setActiveTeamId(Number(event.target.value))}
+                onChange={(event) => {
+                  setActiveTeamId(Number(event.target.value));
+                  setIsManualTimeEntryOpen(false);
+                }}
                 disabled={isTimerRunning}
                 className="w-full appearance-none rounded-xl border-2 border-gray-700 bg-gray-900 px-4 py-2 text-lg text-white transition-all focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-500 disabled:cursor-not-allowed disabled:opacity-50"
               >
@@ -436,6 +508,68 @@ export default function App() {
                 </button>
               </div>
             )}
+
+            <div className="mt-3 shrink-0">
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={handleManualTimeEntryToggle}
+                  disabled={isTimerRunning}
+                  aria-label="Manuelle Zeiteingabe umschalten"
+                  title="Manuelle Zeiteingabe"
+                  className="rounded-full border border-gray-700 bg-gray-900/70 p-2 text-gray-600 transition-colors hover:border-gray-600 hover:text-gray-300 disabled:cursor-not-allowed disabled:opacity-30"
+                >
+                  <Clock3 size={16} />
+                </button>
+              </div>
+
+              {isManualTimeEntryOpen && (
+                <div className="mt-3 rounded-2xl border border-gray-700 bg-gray-900/80 p-4">
+                  <h3 className="mb-3 flex items-center text-sm font-bold uppercase tracking-wider text-gray-300">
+                    <Clock3 className="mr-2 text-red-400" size={16} />
+                    Zeiten manuell eintragen
+                  </h3>
+
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-gray-400">
+                      TLF-Zeit
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={manualPullInput}
+                        onChange={(event) => setManualPullInput(event.target.value)}
+                        disabled={isTimerRunning}
+                        placeholder="optional"
+                        className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 font-mono text-base text-white outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-500/40 disabled:cursor-not-allowed disabled:opacity-50"
+                      />
+                    </label>
+
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-gray-400">
+                      Gesamtzeit
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={manualTotalInput}
+                        onChange={(event) => setManualTotalInput(event.target.value)}
+                        disabled={isTimerRunning}
+                        placeholder="z. B. 1:23.45"
+                        className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 font-mono text-base text-white outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-500/40 disabled:cursor-not-allowed disabled:opacity-50"
+                      />
+                    </label>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleManualTimeSave}
+                    disabled={isTimerRunning}
+                    className="mt-3 flex w-full items-center justify-center rounded-lg bg-red-600 px-4 py-2 text-sm font-bold text-white shadow-md transition-colors hover:bg-red-500 disabled:cursor-not-allowed disabled:bg-gray-700 disabled:text-gray-500"
+                  >
+                    <Save className="mr-2" size={16} />
+                    Zeit eintragen
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
