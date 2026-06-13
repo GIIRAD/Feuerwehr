@@ -334,6 +334,7 @@ export default function App() {
 
     return a.id - b.id;
   });
+  const displayedSplitTime = isTimerRunning ? currentSplitTime : activeTeam?.pullTime ?? null;
 
   if (view === 'settings') {
     return (
@@ -451,10 +452,10 @@ export default function App() {
 
                 <span
                   className={`font-mono text-xl font-bold lg:text-2xl ${
-                    currentSplitTime !== null ? 'text-yellow-400' : 'text-gray-600'
+                    displayedSplitTime !== null ? 'text-yellow-400' : 'text-gray-600'
                   }`}
                 >
-                  {formatTime(currentSplitTime ?? activeTeam?.pullTime)}
+                  {formatTime(displayedSplitTime)}
                 </span>
               </div>
             </div>
