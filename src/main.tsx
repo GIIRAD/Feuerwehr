@@ -520,7 +520,7 @@ export default function App() {
                   title="Manuelle Zeiteingabe"
                   className="rounded-full border border-gray-700 bg-gray-900/70 p-2 text-gray-600 transition-colors hover:border-gray-600 hover:text-gray-300 disabled:cursor-not-allowed disabled:opacity-30"
                 >
-                  <Clock3 size={16} />
+                  <Clock3 size={18} />
                 </button>
               </div>
 
